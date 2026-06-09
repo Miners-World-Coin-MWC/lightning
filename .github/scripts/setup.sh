@@ -1,21 +1,12 @@
 #!/bin/bash
-set -e
+
 export DEBIAN_FRONTEND=noninteractive
-export RUST_VERSION=stable
+export BITCOIN_VERSION=0.20.1
+export ELEMENTS_VERSION=0.18.1.8
+sudo useradd -ms /bin/bash tester
+sudo apt-get update -qq
 
-sudo mkdir -p /var/cache/apt/archives
-mkdir -p ~/ci-cache/apt/
-sudo cp -a ~/ci-cache/apt/. /var/cache/apt/archives/ 2>/dev/null || true
-
-sudo apt-get update
-
-# Install eatmydata, then use it for the rest.
-sudo apt-get install --no-install-recommends --allow-unauthenticated -yy \
-     -o APT::Keep-Downloaded-Packages=true \
-     eatmydata
-
-sudo eatmydata apt-get install --no-install-recommends --allow-unauthenticated -yy \
-    -o APT::Keep-Downloaded-Packages=true \
+sudo apt-get -qq install --no-install-recommends --allow-unauthenticated -yy \
      autoconf \
      automake \
      binfmt-support \
@@ -23,106 +14,55 @@ sudo eatmydata apt-get install --no-install-recommends --allow-unauthenticated -
      clang \
      cppcheck \
      docbook-xml \
+     eatmydata \
      gcc-aarch64-linux-gnu \
      gcc-arm-linux-gnueabihf \
      gcc-arm-none-eabi \
      gettext \
      git \
-     gnupg \
-     jq \
      libc6-dev-arm64-cross \
      libc6-dev-armhf-cross \
-     libev-dev \
-     libevent-dev \
-     libffi-dev \
-     libicu-dev \
+     libgmp-dev \
      libpq-dev \
      libprotobuf-c-dev \
-     libsodium-dev \
      libsqlite3-dev \
-     libssl-dev \
-     pkg-config \
      libtool \
      libxml2-utils \
      locales \
-     lowdown \
      net-tools \
      postgresql \
+     python-pkg-resources \
      python3 \
      python3-dev \
      python3-pip \
      python3-setuptools \
-     qemu-system \
+     qemu \
      qemu-system-arm \
      qemu-user-static \
      shellcheck \
      software-properties-common \
      sudo \
      tcl \
-     tclsh \
-     tshark \
      unzip \
      valgrind \
      wget \
-     wireshark-common \
      xsltproc \
-     systemtap-sdt-dev \
      zlib1g-dev
 
 echo "tester ALL=(root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/tester
 sudo chmod 0440 /etc/sudoers.d/tester
 
-"$(dirname "$0")"/install-bitcoind.sh ~/ci-cache/
-
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
-     -y --default-toolchain ${RUST_VERSION}
-
-uv sync --all-extras --all-groups
-# required for reckless till poetry to uv migration
-uv tool install poetry
-
-# We also need a relatively recent protobuf-compiler, at least 3.12.0,
-# in order to support the experimental `optional` flag.
-
-# BUT WAIT!  Gentoo wants this to match the version from the Python protobuf,
-# which comes from the same tree.  Makes sense!
-
-# And
-#   grpcio-tools-1.69.0` requires `protobuf = ">=5.26.1,<6.0dev"`
-
-# Now, protoc changed to date-based releases, BUT Python protobuf
-# didn't, so Python protobuf 4.21.12 (in Ubuntu 23.04) corresponds to
-# protoc 21.12 (which, FYI, is packaged in Ubuntu as version 3.21.12).
-
-# In general protobuf version x.y.z corresponds to protoc version y.z
-
-# Honorable mention go to Matt Whitlock for spelunking this horror with me!
-
-PROTOC_VERSION=29.4
-PB_REL="https://github.com/protocolbuffers/protobuf/releases"
-PROTOC_ZIP=protoc-${PROTOC_VERSION}-linux-x86_64.zip
-if [ ! -f ~/ci-cache/$PROTOC_ZIP ]; then
-    curl -LO $PB_REL/download/v${PROTOC_VERSION}/$PROTOC_ZIP
-    # Check it before we commit it to the cache!
-    unzip -t $PROTOC_ZIP
-    cp $PROTOC_ZIP ~/ci-cache/
-fi
-sudo unzip ~/ci-cache/$PROTOC_ZIP -d /usr/local/
-sudo chmod a+x /usr/local/bin/protoc
-export PROTOC=/usr/local/bin/protoc
-export PATH=$PATH:/usr/local/bin
-env
-ls -lha /usr/local/bin
-
-# wireshark-common normally does this, but GH runners are special, so we
-# do it explicitly
-sudo groupadd -f wireshark
-sudo chgrp wireshark /usr/bin/dumpcap
-sudo chmod 750 /usr/bin/dumpcap
-sudo setcap cap_net_raw,cap_net_admin=eip /usr/bin/dumpcap
-
-# Add ourselves to the wireshark group (still need "sg wireshark..." for it to take effect)
-sudo usermod -aG wireshark "$(id -nu)"
-
-# Copy archives back for caching
-cp /var/cache/apt/archives/*.deb ~/ci-cache/apt/ || true
+(
+    cd /tmp/ || exit 1
+    wget https://storage.googleapis.com/c-lightning-tests/bitcoin-$BITCOIN_VERSION-x86_64-linux-gnu.tar.bz2
+    wget -q https://storage.googleapis.com/c-lightning-tests/elements-$ELEMENTS_VERSION-x86_64-linux-gnu.tar.bz2
+    tar -xjf bitcoin-$BITCOIN_VERSION-x86_64-linux-gnu.tar.bz2
+    tar -xjf elements-$ELEMENTS_VERSION-x86_64-linux-gnu.tar.bz2
+    sudo mv bitcoin-$BITCOIN_VERSION/bin/* /usr/local/bin
+    sudo mv elements-$ELEMENTS_VERSION/bin/* /usr/local/bin
+    rm -rf \
+       bitcoin-$BITCOIN_VERSION-x86_64-linux-gnu.tar.gz \
+       bitcoin-$BITCOIN_VERSION \
+       elements-$ELEMENTS_VERSION-x86_64-linux-gnu.tar.bz2 \
+       elements-$ELEMENTS_VERSION
+)

@@ -1,23 +1,14 @@
+---
 name: Publish Python 🐍 distributions 📦 to PyPI and TestPyPI
-
 on:
+  # Only deploy if we're the result of a PR being merged
   push:
-    tags:
-      - 'v[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+[0-9a-z]+'
-  workflow_dispatch:
-    inputs:
-      dist-location:
-        description: 'Distribution location (test/prod)'
-        default: 'test'
-        required: false
-
+    branches:
+      - master
 jobs:
   deploy:
     name: Build and publish ${{ matrix.package }} 🐍
-    runs-on: ubuntu-22.04
-    timeout-minutes: 120
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: true
       matrix:
@@ -28,69 +19,54 @@ jobs:
             WORKDIR: contrib/pyln-testing
           - PACKAGE: pyln-proto
             WORKDIR: contrib/pyln-proto
+          - PACKAGE: pyn-bolt1
+            WORKDIR: contrib/pyln-spec/bolt1/
+          - PACKAGE: pyn-bolt2
+            WORKDIR: contrib/pyln-spec/bolt2/
+          - PACKAGE: pyn-bolt4
+            WORKDIR: contrib/pyln-spec/bolt4/
+          - PACKAGE: pyn-bolt7
+            WORKDIR: contrib/pyln-spec/bolt7/
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v6
+    - uses: actions/checkout@master
       with:
         # Need to fetch entire history in order to locate the version tag
         fetch-depth: 0
 
-    - name: Check version tag
-      run: >-
-        git describe --tags --always --dirty=-modded --abbrev=7
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.7
 
-    - name: Setup Version
+    - name: Install pypa/build
+      run: >-
+        python -m pip install build --user
+
+    - name: Build a binary wheel and a source tarball
       env:
         WORKDIR: ${{ matrix.WORKDIR }}
-      run: |
-        echo "VERSION=$(git describe --tags --abbrev=0).post$(git describe --tags --abbrev=1 | awk -F "-" '{print $2}')" >> $GITHUB_ENV
-
-    - name: Set up values
-      id: set-values
-      run: |
-        if [[ "${{ github.event.inputs.dist-location }}" != "" ]]; then
-          DISTLOCATION=${{ github.event.inputs.dist-location }}
-        elif [[ "${{ github.ref_type }}" == "tag" ]] && [[ ! "${{ github.ref_name }}" =~ rc ]]; then
-          DISTLOCATION="prod"
-        else
-          DISTLOCATION="test"
-        fi
-        echo "DISTLOCATION=$DISTLOCATION" >> $GITHUB_OUTPUT
-        echo "EVENT DISTLOCATION: ${{ github.event.inputs.dist-location }}"
-        echo "DISTRIBUTION LOCATION: $DISTLOCATION"
-  
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.10'
-
-    - name: Install uv
-      uses: astral-sh/setup-uv@v8.1.0
-
-    - name: Update pyln versions
-      id: update-versions
-      run: |
-        export VERSION=$(git describe --tags --abbrev=0)
-        echo "Pyln VERSION: $VERSION"
-        make update-pyln-versions NEW_VERSION=$VERSION
+      run: >-
+        cd ${{ env.WORKDIR}} &&
+        python -m build --sdist --wheel --outdir dist/ .
 
     - name: Publish distribution 📦 to Test PyPI
-      if: github.repository == 'ElementsProject/lightning' && steps.set-values.outputs.DISTLOCATION == 'test'
+      if: github.repository == 'ElementsProject/lightning'
+      uses: pypa/gh-action-pypi-publish@master
       env:
-        UV_PUBLISH_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
         WORKDIR: ${{ matrix.WORKDIR }}
-      run: |
-        echo "Pyln VERSION: $VERSION"
-        uv build --package ${{ matrix.PACKAGE }}
-        uv publish --publish-url https://test.pypi.org/legacy/ --check-url https://test.pypi.org/simple/
+      with:
+        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        repository_url: https://test.pypi.org/legacy/
+        packages_dir: "${{ env.WORKDIR}}/dist"
+        skip_existing: true
 
     - name: Publish distribution 📦 to PyPI
-      if: github.repository == 'ElementsProject/lightning' && steps.set-values.outputs.DISTLOCATION == 'prod'
+      if: startsWith(github.ref, 'refs/tags') && github.repository == 'ElementsProject/lightning'
+      uses: pypa/gh-action-pypi-publish@master
       env:
-        UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         WORKDIR: ${{ matrix.WORKDIR }}
-      run: |
-        echo "UV VERSION PUBLISH: $(uv --version)"
-        echo "Pyln VERSION: $VERSION"
-        uv build --package ${{ matrix.PACKAGE }}
-        uv publish
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}
+        packages_dir: "${{ env.WORKDIR}}/dist"
+        # We should never have a conflict here, the version tags are unique
+        skip_existing: false
