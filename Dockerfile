@@ -1,6 +1,6 @@
 # This dockerfile is meant to compile a c-lightning x64 image
 # It is using multi stage build:
-# * downloader: Download litecoin/bitcoin and qemu binaries needed for c-lightning
+# * downloader: Download minersworldcoin/litecoin/bitcoin and qemu binaries needed for c-lightning
 # * builder: Compile c-lightning dependencies, then c-lightning itself with static linking
 # * final: Copy the binaries required at runtime
 # The resulting image uploaded to dockerhub will only contain what is needed for runtime.
@@ -44,6 +44,23 @@ RUN mkdir /opt/litecoin && cd /opt/litecoin \
     && BD=litecoin-$LITECOIN_VERSION/bin \
     && tar -xzvf litecoin.tar.gz $BD/litecoin-cli --strip-components=1 --exclude=*-qt \
     && rm litecoin.tar.gz
+
+ENV MWC_VERSION 1.0.0.1
+ENV MWC_URL https://github.com/Miners-World-Coin-MWC/MinersWorldCoin/releases/download/1.0.0.1/minersworldcoin-x86_64-linux.zip
+ENV MWC_SHA256 4427a9d5d718873d77e3fef264fb29074e0b273d2c7d5d9cd52760093c95a04f
+
+# install MinersWorldCoin binaries
+RUN mkdir /opt/mwc && cd /opt/mwc \
+    && wget -qO mwc.zip "$MWC_URL" \
+    && echo "$MWC_SHA256  mwc.zip" | sha256sum -c - \
+    && apt-get update && apt-get install -y unzip \
+    && unzip mwc.zip \
+    && cp minersworldcoin-x86_64-linux/depends/x86_64-unknown-linux-gnu/bin/minersworldcoind . \
+    && cp minersworldcoin-x86_64-linux/depends/x86_64-unknown-linux-gnu/bin/minersworldcoin-cli . \
+    && cp minersworldcoin-x86_64-linux/depends/x86_64-unknown-linux-gnu/bin/minersworldcoin-tx . \
+    && chmod +x minersworldcoind minersworldcoin-cli minersworldcoin-tx \
+    && rm -rf minersworldcoin-x86_64-linux \
+    && rm mwc.zip
 
 FROM debian:buster-slim as builder
 
@@ -90,7 +107,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends socat inotify-t
 ENV LIGHTNINGD_DATA=/root/.lightning
 ENV LIGHTNINGD_RPC_PORT=9835
 ENV LIGHTNINGD_PORT=9735
-ENV LIGHTNINGD_NETWORK=bitcoin
+ENV LIGHTNINGD_NETWORK=minersworldcoin
 
 RUN mkdir $LIGHTNINGD_DATA && \
     touch $LIGHTNINGD_DATA/config
@@ -98,6 +115,11 @@ VOLUME [ "/root/.lightning" ]
 COPY --from=builder /tmp/lightning_install/ /usr/local/
 COPY --from=downloader /opt/bitcoin/bin /usr/bin
 COPY --from=downloader /opt/litecoin/bin /usr/bin
+
+COPY --from=downloader /opt/mwc/minersworldcoind /usr/bin/
+COPY --from=downloader /opt/mwc/minersworldcoin-cli /usr/bin/
+COPY --from=downloader /opt/mwc/minersworldcoin-tx /usr/bin/
+
 COPY tools/docker-entrypoint.sh entrypoint.sh
 
 EXPOSE 9735 9835

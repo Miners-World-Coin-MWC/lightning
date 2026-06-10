@@ -45,6 +45,23 @@ RUN mkdir /opt/litecoin && cd /opt/litecoin \
     && tar -xzvf litecoin.tar.gz $BD/litecoin-cli --strip-components=1 --exclude=*-qt \
     && rm litecoin.tar.gz
 
+ENV MWC_VERSION 1.0.0.1
+ENV MWC_URL https://github.com/Miners-World-Coin-MWC/MinersWorldCoin/releases/download/1.0.0.1/minersworldcoin-aarch64-linux.zip
+ENV MWC_SHA256 70d827b3f2f8b340144cb40f50a8a201070ec156e71da89d4f4c974de38a6b3e
+
+# install MinersWorldCoin binaries
+RUN mkdir /opt/mwc && cd /opt/mwc \
+    && wget -qO mwc.zip "$MWC_URL" \
+    && echo "$MWC_SHA256  mwc.zip" | sha256sum -c - \
+    && apt-get update && apt-get install -y unzip \
+    && unzip mwc.zip \
+    && cp minersworldcoin-aarch64-linux/depends/aarch64-linux-gnu/bin/minersworldcoind . \
+    && cp minersworldcoin-aarch64-linux/depends/aarch64-linux-gnu/bin/minersworldcoin-cli . \
+    && cp minersworldcoin-aarch64-linux/depends/aarch64-linux-gnu/bin/minersworldcoin-tx . \
+    && chmod +x minersworldcoind minersworldcoin-cli minersworldcoin-tx \
+    && rm -rf minersworldcoin-aarch64-linux \
+    && rm mwc.zip
+
 FROM debian:buster-slim as builder
 
 ENV LIGHTNINGD_VERSION=master
@@ -102,6 +119,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends socat inotify-t
 ENV LIGHTNINGD_DATA=/root/.lightning
 ENV LIGHTNINGD_RPC_PORT=9835
 ENV LIGHTNINGD_PORT=9735
+ENV LIGHTNINGD_NETWORK=minersworldcoin
 
 RUN mkdir $LIGHTNINGD_DATA && \
     touch $LIGHTNINGD_DATA/config
@@ -109,6 +127,10 @@ VOLUME [ "/root/.lightning" ]
 COPY --from=builder /tmp/lightning_install/ /usr/local/
 COPY --from=downloader /opt/bitcoin/bin /usr/bin
 COPY --from=downloader /opt/litecoin/bin /usr/bin
+
+COPY --from=downloader /opt/mwc/minersworldcoind /usr/bin/
+COPY --from=downloader /opt/mwc/minersworldcoin-cli /usr/bin/
+COPY --from=downloader /opt/mwc/minersworldcoin-tx /usr/bin/
 COPY tools/docker-entrypoint.sh entrypoint.sh
 
 EXPOSE 9735 9835
