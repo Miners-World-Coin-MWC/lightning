@@ -229,8 +229,11 @@ static struct command_result *handle_invreq_response(struct command *cmd,
 	sighash_from_merkle("invoice", "signature", &merkle, &sighash);
 
 	if (!inv->signature
-	    || secp256k1_schnorrsig_verify(secp256k1_ctx, inv->signature->u8,
-					   sighash.u.u8, &inv->node_id->pubkey) != 1) {
+	    || secp256k1_schnorrsig_verify(secp256k1_ctx,
+                                           inv->signature->u8,
+                                           sighash.u.u8,
+                                           sizeof(sighash.u.u8),
+                                           &inv->node_id->pubkey) != 1) {
 		badfield = "signature";
 		goto badinv;
 	}
@@ -1206,11 +1209,11 @@ force_payer_secret(struct command *cmd,
 	sighash_from_merkle("invoice_request", "payer_signature", &merkle, &sha);
 
 	sent->invreq->payer_signature = tal(invreq, struct bip340sig);
-	if (!secp256k1_schnorrsig_sign(secp256k1_ctx,
+	if (!secp256k1_schnorrsig_sign32(secp256k1_ctx,
 				       sent->invreq->payer_signature->u8,
 				       sha.u.u8,
 				       &kp,
-				       NULL, NULL)) {
+				       NULL)) {
 		return command_fail(cmd, LIGHTNINGD,
 				    "Failed to sign with payer_secret");
 	}
