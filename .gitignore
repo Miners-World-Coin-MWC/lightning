@@ -58,3 +58,4 @@ doc/lightning*.[1578]
 *_wiregen.[ch]
 *_printgen.[ch]
 *_gettextgen.po
+.venv-mrkd/
