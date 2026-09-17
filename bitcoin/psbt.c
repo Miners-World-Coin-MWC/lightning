@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <bitcoin/chainparams.h>
 #include <bitcoin/psbt.h>
+#include <bitcoin/signature.h>
 #include <bitcoin/pubkey.h>
 #include <bitcoin/script.h>
 #include <ccan/ccan/array_size/array_size.h>
@@ -264,24 +265,44 @@ void psbt_input_add_pubkey(struct wally_psbt *psbt, size_t in,
 }
 
 bool psbt_input_set_signature(struct wally_psbt *psbt, size_t in,
-			      const struct pubkey *pubkey,
-			      const struct bitcoin_signature *sig)
+                              const struct pubkey *pubkey,
+                              const struct bitcoin_signature *sig)
 {
-	u8 pk_der[PUBKEY_CMPR_LEN];
-	bool ok;
+        u8 pk_der[PUBKEY_CMPR_LEN];
+        u8 sig_der[73];
+        size_t sig_der_len;
+        int wally_err;
 
-	assert(in < psbt->num_inputs);
+        assert(in < psbt->num_inputs);
 
-	/* we serialize the compressed version of the key, wally likes this */
-	pubkey_to_der(pk_der, pubkey);
-	tal_wally_start();
-	wally_psbt_input_set_sighash(&psbt->inputs[in], sig->sighash_type);
-	ok = wally_psbt_input_add_signature(&psbt->inputs[in],
-					    pk_der, sizeof(pk_der),
-					    sig->s.data,
-					    sizeof(sig->s.data)) == WALLY_OK;
-	tal_wally_end(psbt);
-	return ok;
+        /* Serialize the compressed public key for the PSBT key map. */
+        pubkey_to_der(pk_der, pubkey);
+
+        /*
+         * PSBT signatures must be DER encoded and followed by the
+         * one-byte sighash type.  Do not pass the internal 64-byte
+         * secp256k1 signature representation directly to libwally.
+         */
+        sig_der_len = signature_to_der(sig_der, sig);
+
+        tal_wally_start();
+
+        wally_err =
+                wally_psbt_input_set_sighash(&psbt->inputs[in],
+                                             sig->sighash_type);
+
+        if (wally_err == WALLY_OK) {
+                wally_err =
+                        wally_psbt_input_add_signature(&psbt->inputs[in],
+                                                       pk_der,
+                                                       sizeof(pk_der),
+                                                       sig_der,
+                                                       sig_der_len);
+        }
+
+        tal_wally_end(psbt);
+
+        return wally_err == WALLY_OK;
 }
 
 void psbt_input_set_wit_utxo(struct wally_psbt *psbt, size_t in,

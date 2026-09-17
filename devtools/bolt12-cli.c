@@ -318,9 +318,10 @@ static bool print_signature(const char *messagename,
 	merkle_tlv(fields, &m);
 	sighash_from_merkle(messagename, fieldname, &m, &shash);
 	if (secp256k1_schnorrsig_verify(secp256k1_ctx,
-					sig->u8,
-					shash.u.u8,
-					&node_id->pubkey) != 1) {
+                                           sig->u8,
+                                           shash.u.u8,
+                                           sizeof(shash.u.u8),
+                                           &node_id->pubkey) != 1) {
 		fprintf(stderr, "%s: INVALID\n", fieldname);
 		return false;
 	}
