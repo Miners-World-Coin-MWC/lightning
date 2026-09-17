@@ -26,16 +26,38 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v8.1.0
-
       - name: Install dependencies
         run: bash -x .github/scripts/setup.sh
 
+      - name: Install Python dependencies
+        run: |
+          pip3 install --user -U \
+            -r requirements.lock
+
+          pip3 install --user --no-index \
+            --use-feature=in-tree-build \
+            ./contrib/pyln-spec/bolt7 \
+            ./contrib/pyln-client \
+            ./contrib/pyln-proto \
+            ./contrib/pyln-testing
+
+          # Install utilities that aren't dependencies, but make
+          # running tests easier/feasible on CI.
+          pip3 install --user -U \
+            blinker \
+            flake8 \
+            flaky \
+            mako \
+            pytest-sentry \
+            pytest-test-groups==1.0.3 \
+            pytest-custom-exit-code==0.3.0 \
+            pytest-json-report
+
       - name: Build with coverage instrumentation
         run: |
+          export PATH="$HOME/.local/bin:$PATH"
           ./configure --enable-debugbuild --enable-coverage CC=clang
-          uv run make -j $(nproc) testpack.tar.bz2
+          make -j $(nproc) testpack.tar.bz2
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
@@ -67,11 +89,32 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v8.1.0
-
       - name: Install dependencies
         run: bash -x .github/scripts/setup.sh
+
+      - name: Install Python dependencies
+        run: |
+          pip3 install --user -U \
+            -r requirements.lock
+
+          pip3 install --user --no-index \
+            --use-feature=in-tree-build \
+            ./contrib/pyln-spec/bolt7 \
+            ./contrib/pyln-client \
+            ./contrib/pyln-proto \
+            ./contrib/pyln-testing
+
+          # pytest-xdist provides the -n flag used below for parallel tests
+          pip3 install --user -U \
+            blinker \
+            flake8 \
+            flaky \
+            mako \
+            pytest-sentry \
+            pytest-xdist \
+            pytest-test-groups==1.0.3 \
+            pytest-custom-exit-code==0.3.0 \
+            pytest-json-report
 
       - name: Install Bitcoin Core
         run: bash -x .github/scripts/install-bitcoind.sh
@@ -93,8 +136,9 @@ jobs:
           TIMEOUT: 900
           TEST_LOG_IGNORE_ERRORS: "1"
         run: |
+          export PATH="$HOME/.local/bin:$PATH"
           mkdir -p "$CLN_COVERAGE_DIR"
-          uv run eatmydata pytest tests/ -n ${PYTEST_PAR} -vvv
+          eatmydata pytest tests/ -n ${PYTEST_PAR} -vvv
 
       - name: Upload coverage data
         uses: actions/upload-artifact@v7
@@ -178,3 +222,4 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "📊 Download detailed HTML report from workflow artifacts" >> $GITHUB_STEP_SUMMARY
+          

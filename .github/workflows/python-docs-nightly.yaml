@@ -27,15 +27,23 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v8.1.0
-
       - name: Install dependencies
         run: |
-          uv sync --all-extras
+          pip3 install --user -U \
+            -r requirements.lock
+
+          pip3 install --user --no-index \
+            --use-feature=in-tree-build \
+            ./contrib/pyln-spec/bolt7 \
+            ./contrib/pyln-client \
+            ./contrib/pyln-proto \
+            ./contrib/pyln-testing
+
+          pip3 install --user -U mako
 
       - name: Generate documentation
         run: |
+          export PATH="$HOME/.local/bin:$PATH"
           make python-docs
 
       - name: Upload documentation artifact
@@ -58,3 +66,4 @@ jobs:
           echo "- pyln.spec.bolt7 - BOLT #7 specification implementation" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Download the artifact to view the complete API documentation." >> $GITHUB_STEP_SUMMARY
+          
