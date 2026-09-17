@@ -12,10 +12,10 @@ jobs:
       EXPERIMENTAL_FEATURES: 0
       COMPAT: 1
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Test in FreeBSD
       id: test
-      uses: vmactions/freebsd-vm@v0.1.5
+      uses: vmactions/freebsd-vm@v1
       with:
         envs: 'DEVELOPER VALGRIND EXPERIMENTAL_FEATURES COMPAT'
         usesh: true
@@ -83,4 +83,4 @@ jobs:
 
           # Clean up to maximize rsync's chances of succeeding
           gmake clean
-
+          
